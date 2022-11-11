@@ -1,9 +1,47 @@
-/**
- * Adds a simple error check for the string-equality comparison problem.
- */
-aspect StringEqCheck {
-  EQExpr contributes error("String equality testing should be done with .equals()!")
-      when left().type().isString() && right().type().isString()
-      to CompilationUnit.problems();
-}
+import org.improver.magpiebridge.utils.Pos;
 
+aspect STREQ {
+  EQExpr contributes warning(
+      getCompilationUnit().pathName(),
+      "Use of '==' to compare strings is discouraged. Use 'equals()' instead.",
+      Analysis.AvailableAnalysis.STREQ, null, getRelatedInfo()) when
+      left()
+          .type()
+          .isString() &&
+      right().type().isString() to CompilationUnit.STREQ();
+
+  syn java.util.List<Pair<Position, String>> EQExpr.getRelatedInfo() {
+    java.util.List<Pair<Position, String>> result = new ArrayList<>();
+
+    result.add(
+        Pair.make(getLeftOperand().getPosition(),
+                  getLeftOperand().prettyPrint() + " is of type String"));
+    result.add(
+        Pair.make(getRightOperand().getPosition(),
+                  getRightOperand().prettyPrint() + " is of type String"));
+    return result;
+  }
+
+  syn Position ASTNode.getPosition() {
+    try {
+
+      Position res =
+          new Pos(lineStart(), lineEnd(), columnStart() - 1, columnEnd(),
+                         getCompilationUnit().pathName());
+      return res;
+    } catch (Throwable t) {
+    }
+    return null;
+  }
+
+  syn Position Variable.getPosition() {
+    try {
+      Position res =
+          new Pos(lineStart(), lineEnd(), columnStart() - 1, columnEnd(),
+                         getCompilationUnit().pathName());
+      return res;
+    } catch (Throwable t) {
+    }
+    return null;
+  }
+}

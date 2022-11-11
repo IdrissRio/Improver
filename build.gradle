@@ -1,3 +1,5 @@
+import org.apache.tools.ant.taskdefs.condition.Os
+
 plugins {
   id 'java'
   id 'org.jastadd' version '1.13.3'
@@ -9,14 +11,16 @@ if (!file('extendj/jastadd_modules').exists()) {
   throw new GradleException('ExtendJ seems to be missing. Please run "git submodule init", then "git submodule update".')
 }
 
+
+
 jastadd {
   configureModuleBuild()
 
   modules {
     include("extendj/jastadd_modules") // Include core ExtendJ modules.
 
-    module "template", {
-      imports "java8 frontend" // ExtendJ dependency for template module.
+    module "improver", {
+      imports "java8 frontend" // ExtendJ dependency for improver module.
 
       jastadd {
         basedir "src/jastadd/"
@@ -24,20 +28,14 @@ jastadd {
         include "**/*.jadd"
         include "**/*.jrag"
       }
-
-      //scanner {
-      // List scanner files here.
-      //}
-
-      //parser {
-      // List parser files here.
-      //}
     }
   }
 
   // Target module to build:
-  module = 'template'
-
+  module = 'improver'
+  jastaddOptions = [ "--rewrite=cnta",
+                     "--safeLazy",
+                     "--visitCheck=false"]
   astPackage = 'org.extendj.ast'
   parser.name = 'JavaParser'
   scanner.name = 'OriginalScanner'
@@ -46,25 +44,92 @@ jastadd {
 sourceSets.main {
   java {
     srcDir 'extendj/src/frontend-main'
+    srcDir 'src/java'
   }
   resources {
+    srcDir 'src/java/magpiebridge/resources'
     srcDir 'extendj/src/res'
     srcDir jastadd.buildInfoDir
   }
+  repositories {
+    mavenLocal()
+  }
+
 }
 
-// Use JavaCompiler if you need bytecode generation.
-jar.manifest.attributes 'Main-Class': 'org.extendj.JavaChecker'
-//jar.manifest.attributes 'Main-Class': 'org.extendj.JavaCompiler'
-jar.destinationDir = projectDir
+dependencies{
+    testImplementation 'junit:junit:4.12'
+    implementation 'junit:junit:4.12'
+    implementation 'com.github.magpiebridge:magpiebridge:0.1.5'
+    implementation 'com.sun.net.httpserver:http:20070405'
+    implementation group: 'org.freemarker', name: 'freemarker', version: '2.3.29'
+}
+
+sourceSets.test{
+  java{
+    srcDir 'src/java/test/'
+  }
+}
+
+test {
+   useJUnit()
+  dependsOn 'cleanTest'
+}
+
+
+task vsce(type:Exec) {
+    workingDir "."
+    commandLine 'sh', 'generate_vsce.sh'
+    println "DETECTED OS: not windows. Running `generate_vsce.sh`"
+    standardOutput = new ByteArrayOutputStream()
+    ext.output = {
+        return standardOutput.toString()
+    }
+}
+vsce.dependsOn 'build'
+
+
+task vscode(type: Jar) { 
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+
+    from { configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) } } {
+        exclude 'META-INF/*.RSA', 'META-INF/*.SF', 'META-INF/*.DSA'
+    }
+    from sourceSets.main.output
+    manifest {
+        attributes 'Main-Class': 'org.improver.frontend.Improver'
+    }
+    baseName = 'improver'
+    destinationDir= file('vscode')
+}
+
+task improver(type: Jar) { 
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+
+    from { configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) } } {
+        exclude 'META-INF/*.RSA', 'META-INF/*.SF', 'META-INF/*.DSA'
+    }
+    from sourceSets.main.output
+    manifest {
+            attributes 'Main-Class': 'org.improver.frontend.Improver'
+    }
+    baseName = 'improver'
+    destinationDir = projectDir
+}
+
+artifacts {
+    archives  vscode, improver;
+}
+
+jar.destinationDirectory = projectDir
 
 // Java -source and -target version.
-sourceCompatibility = targetCompatibility = '1.7'
+sourceCompatibility = targetCompatibility = '1.8'
 
 task sourceZip(type: Zip) {
   description 'Builds a Zip file with the entire repisotory (including the ExtendJ submodule).'
-  destinationDir = projectDir
-  archiveName = "template-src.zip"
+  destinationDirectory = projectDir
+  archiveFileName = "improver-src.zip"
 
   from (projectDir) {
     exclude '**/.git'
@@ -82,5 +147,5 @@ task sourceZip(type: Zip) {
     exclude '**/*.swp'
   }
 
-  into 'template'
+  into 'improver'
 }
